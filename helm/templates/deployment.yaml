@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "app.fullname" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "app.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "app.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "app.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- if .Values.image }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: { { .Values.image.pullPolicy | default "Always" } }
+          {{- else }}
+          image: "faspopocacr.azurecr.io/{{ .Chart.Name }}:{{ .Chart.AppVersion }}"
+          imagePullPolicy: "Always"
+          {{- end }}
+          ports:
+          {{- range $port := .Values.service.ports }}
+            - name: {{ $port.name }}
+              protocol: {{ $port.protocol | default "TCP" }}
+              containerPort: {{ $port.port }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /alive
+              port: 8080
+            initialDelaySeconds: 1
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 1
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            - name: OTEL_SERVICE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          {{- range $.Values.env }}
+            - name: {{ .name | quote }}
+              {{- if or (kindIs "slice" .value) (kindIs "map" .value) }}
+              value: {{ .value | toJson | quote }}
+              {{- else if (default false .b64) }}
+              value: {{ .value | b64dec | quote }}
+              {{- else }}
+              value: {{ .value | quote }}
+              {{- end }}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

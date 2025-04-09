@@ -1,0 +1,55 @@
+name: Promote Version
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+jobs:
+  promote-version:
+    if: github.event.pull_request.merged == true
+
+    runs-on:
+      group: azure-integrated-runners
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      VERSION_FILE: helm/Chart.yaml
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.SELF_DEPLOY_KEY }}
+
+      - name: Config Git
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+
+      - name: Resolve new version
+        run: |
+          oldVersion=$(grep "^version:" ${{ env.VERSION_FILE }} | cut -c 10-)
+          newVersion=`echo $(echo $oldVersion | cut -f-2 -d.).$(( $(echo $oldVersion | cut -f3 -d.) + 1 ))`        
+          echo "OLD_VERSION=$oldVersion" >> $GITHUB_ENV
+          echo "NEW_VERSION=$newVersion" >> $GITHUB_ENV
+
+      - name: Change version in file
+        run: |
+          sed -i -E "s/^version: .*/version: ${{ env.NEW_VERSION }}/g" ${{ env.VERSION_FILE }}
+          sed -i -E "s/^appVersion: .*/appVersion: ${{ env.NEW_VERSION }}/g" ${{ env.VERSION_FILE }}
+
+      - name: Push version change
+        run: |
+          git add ${{ env.VERSION_FILE }}
+          git commit -m "[build] v${{ env.NEW_VERSION }}"
+          git push
+
+      - name: Create tag
+        run: |
+          git tag -a "v${{ env.NEW_VERSION }}" -m "Version release: ${{ env.NEW_VERSION }}"
+          git push origin "v${{ env.NEW_VERSION }}"

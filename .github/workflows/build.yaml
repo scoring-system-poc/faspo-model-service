@@ -1,0 +1,88 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, '[build]')
+
+    runs-on:
+      group: azure-integrated-runners
+
+    defaults:
+      run:
+        shell: bash
+
+    permissions:
+      id-token: write
+
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      VERSION_FILE: helm/Chart.yaml
+      APP_NAME: faspo-model-service
+
+    outputs:
+      APP_VERSION: ${{ steps.get_app_version.outputs.APP_VERSION }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.SELF_DEPLOY_KEY }}
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: ACR login
+        run: az acr login --name ${{ secrets.AZURE_ACR_NAME }}
+
+      - name: Get app version
+        id: get_app_version
+        run: |
+          if [ ${{ github.event_name }} = 'workflow_dispatch' ]; then
+            echo "APP_VERSION=0.0.$(date +%s)" >> $GITHUB_OUTPUT
+          else
+            echo "APP_VERSION=$(sed -n 's/^version\: \(.*\)/\1/p' ${{ env.VERSION_FILE }})" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build Docker image
+        run: docker build -t ${{ env.APP_NAME }}:${{ steps.get_app_version.outputs.APP_VERSION }} .
+
+      - name: Tag Docker Image
+        run: |
+          docker tag \
+            ${{ env.APP_NAME }}:${{ steps.get_app_version.outputs.APP_VERSION }} \
+            ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/${{ env.APP_NAME }}:${{ steps.get_app_version.outputs.APP_VERSION }}
+
+      - name: Push Docker image
+        run: |
+          docker push \
+            ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/${{ env.APP_NAME }}:${{ steps.get_app_version.outputs.APP_VERSION }}
+
+      - name: HELM login
+        run: |
+          helm registry login \
+            ${{ secrets.AZURE_ACR_NAME }}.azurecr.io \
+            --username 00000000-0000-0000-0000-000000000000 \
+            --password $(az acr login --name ${{ secrets.AZURE_ACR_NAME }} --expose-token --output tsv --query accessToken)
+
+      - name: Build HELM charts
+        run: helm package helm/ --destination helm/
+
+      - name: Push HELM charts
+        run: helm push helm/*.tgz oci://${{ secrets.AZURE_ACR_NAME }}.azurecr.io/helm
+
+  deploy:
+    needs: build
+    uses: ./.github/workflows/deploy.yaml
+    secrets: inherit
+    with:
+      APP_VERSION: ${{ needs.build.outputs.APP_VERSION }}

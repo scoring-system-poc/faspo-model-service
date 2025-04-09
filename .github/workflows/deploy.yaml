@@ -1,0 +1,50 @@
+name: Deploy
+
+on:
+  workflow_call:
+    inputs:
+      APP_VERSION:
+        description: Version to deploy
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      APP_VERSION:
+        description: Version to deploy
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on:
+      group: azure-integrated-runners
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      VERSION_FILE: helm/Chart.yaml
+      APP_NAME: faspo-model-service
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.APPS_DEPLOY_KEY }}
+          repository: scoring-system-poc/faspo-apps
+          ref: env/poc
+
+      - name: Config Git
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+
+      - name: Change version in ArgoCD file
+        run: |
+          sed -i -E "s|^(.*)targetRevision: .*|\1targetRevision: ${{ inputs.APP_VERSION }}|g" ${{ env.APP_NAME }}.yaml
+
+      - name: Deploy
+        run: |
+          git add ${{ env.APP_NAME }}.yaml
+          git commit -m "[auto-deploy] ${{ env.APP_NAME }}:${{ inputs.APP_VERSION }}"
+          git push
