@@ -1,5 +1,4 @@
 import pytest
-import unittest.mock
 import httpx
 
 from src.core.exception import HTTPException
@@ -7,7 +6,9 @@ from src.core.exception import HTTPException
 
 @pytest.mark.asyncio
 async def test_score__happy_path(async_client: httpx.AsyncClient, mock_001_docs, mock_score_service) -> None:
-    mock_score_service.calculate_final_document.return_value = unittest.mock.MagicMock(id="id")
+    mock_score_service.calculate_summary_document.return_value = mock_001_docs[0]
+    mock_score_service.calculate_scoring_documents.return_value = mock_001_docs
+    mock_score_service.calculate_final_document.return_value = mock_001_docs[0]
 
     response = await async_client.post(
         "/api/v1/score",
@@ -15,7 +16,7 @@ async def test_score__happy_path(async_client: httpx.AsyncClient, mock_001_docs,
     )
 
     assert response.status_code == 201
-    assert response.json() == {"id": "id"}
+    assert response.json() == {"id": "1"}
 
 
 @pytest.mark.asyncio
