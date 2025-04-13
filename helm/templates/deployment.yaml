@@ -47,14 +47,16 @@ spec:
           {{- end }}
           livenessProbe:
             httpGet:
-              path: /alive
+              path: /api/v1/probe/alive
               port: 8080
             initialDelaySeconds: 1
+            periodSeconds: 1
           readinessProbe:
             httpGet:
-              path: /ready
+              path: /api/v1/probe/ready
               port: 8080
             initialDelaySeconds: 1
+            periodSeconds: 10
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           env:
