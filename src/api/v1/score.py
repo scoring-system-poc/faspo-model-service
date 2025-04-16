@@ -14,12 +14,12 @@ router = fastapi.APIRouter(
 )
 
 
-@router.post("/score")
+@router.post("/score", status_code=201)
 def score_(
     docs: typing.Annotated[list[FullDocument], fastapi.Body()],
     background_tasks: fastapi.BackgroundTasks,
     correlation_id: typing.Annotated[str | None, fastapi.Header()] = None,
-) -> fastapi.responses.JSONResponse:
+) -> FullDocument:
     """
     Score.
     :param docs: List of documents input documents used for scoring.
@@ -58,10 +58,8 @@ def score_(
             for sheet in doc.sheets:
                 background_tasks.add_task(data_target.post_data, sheet, correlation_id)
 
-        return fastapi.responses.JSONResponse(
-            content={"id": final_doc.id},
-            status_code=201,
-        )
+        return final_doc
+
     except HTTPException as e:
         raise e
     except Exception as e:

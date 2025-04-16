@@ -2,6 +2,7 @@ import pytest
 import httpx
 
 from src.core.exception import HTTPException
+from src.model.document import FullDocument
 
 
 @pytest.mark.asyncio
@@ -16,7 +17,7 @@ async def test_score__happy_path(async_client: httpx.AsyncClient, mock_001_docs,
     )
 
     assert response.status_code == 201
-    assert response.json() == {"id": "1"}
+    assert FullDocument(**response.json())
 
 
 @pytest.mark.asyncio
