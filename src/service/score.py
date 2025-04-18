@@ -128,7 +128,7 @@ def calculate_scoring_documents(summary_docs: list[FullDocument]) -> list[FullDo
 
             col_sums = [sum(col) for col in list(zip(*sheet.items))[2:]]
             row_sums = [sum(row[2:]) for row in sheet.items]
-            cross_product = [[(r * c / (r + c)) if (r + c) else float("nan") for c in col_sums] for r in row_sums]
+            cross_product = [[(r * c / (r + c)) if (r + c) else None for c in col_sums] for r in row_sums]
 
             docs.append(
                 FullDocument(
